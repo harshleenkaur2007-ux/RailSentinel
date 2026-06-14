@@ -223,7 +223,7 @@ function ensure() {
       };
       const a = pick(agents);
       _logs = [
-        { id: `L${Date.now()}`, agent: a, level: "info", ts: Date.now(), message: pick(messages[a]) },
+        { id: `L${Date.now()}`, agent: a, level: "info" as const, ts: Date.now(), message: pick(messages[a]) },
         ..._logs,
       ].slice(0, 40);
       emit();
