@@ -77,14 +77,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "RailSentinel" },
+      { name: "description", content: "RailSentinel is a real-time mission-critical operations dashboard for national rail command centers." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "RailSentinel" },
+      { property: "og:description", content: "RailSentinel is a real-time mission-critical operations dashboard for national rail command centers." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "RailSentinel" },
+      { name: "twitter:description", content: "RailSentinel is a real-time mission-critical operations dashboard for national rail command centers." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d4b39384-ead4-4ea3-bfcf-6407b33f8e83/id-preview-01778404--69dad398-3fb7-4867-8645-48461b71dd97.lovable.app-1781436851743.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d4b39384-ead4-4ea3-bfcf-6407b33f8e83/id-preview-01778404--69dad398-3fb7-4867-8645-48461b71dd97.lovable.app-1781436851743.png" },
     ],
     links: [
       {
