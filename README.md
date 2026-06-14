@@ -1,0 +1,1 @@
+RailSentinel is an AI-powered autonomous command layer concept designed to monitor a national rail network in real time. It aims to detect disasters before they escalate, simulate autonomous train rerouting, manage crush-level crowd safety, and orchestrate emergency response within seconds a massive optimization over legacy manual chains.
