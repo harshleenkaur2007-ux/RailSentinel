@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import { motion } from "framer-motion";
-import { useTrains, type Train } from "@/lib/rail-data";
+import { useTrains, useIncidents, type Train, type Incident } from "@/lib/rail-data";
 
-function trainIcon(status: Train["status"], heading: number) {
+function trainIcon(status: Train["status"], heading: number, dimmed: boolean, focused: boolean) {
   const color =
     status === "critical" ? "#D93636" : status === "warning" ? "#CA8A04" : "#16A34A";
-  const pulse = status === "critical" ? "pulse-alert" : "";
+  const pulse = focused || status === "critical" ? "pulse-alert" : "";
+  const opacity = dimmed ? 0.3 : 1;
   const html = `
-    <div class="relative">
+    <div class="relative" style="opacity:${opacity};transition:opacity .4s ease;">
       <div class="${pulse} grid h-4 w-4 place-items-center rounded-full" style="background:${color};box-shadow:0 0 10px ${color}aa,0 0 0 2px #0F2547;">
         <div style="transform:rotate(${heading}deg);font-size:9px;line-height:1;color:#0F2547;font-weight:900;">▲</div>
       </div>
@@ -17,37 +18,116 @@ function trainIcon(status: Train["status"], heading: number) {
   return L.divIcon({ html, className: "rail-train-marker", iconSize: [16, 16], iconAnchor: [8, 8] });
 }
 
-const corridorPaths: [number, number][][] = [
-  [[19.076, 72.877],[19.02, 73.05],[18.95, 73.25],[18.85, 73.45],[18.75, 73.65],[18.52, 73.85]],
-  [[28.61, 77.21],[28.4, 77.3],[28.0, 77.5],[27.6, 77.7],[27.18, 78.01]],
-  [[22.58, 88.36],[22.8, 87.95],[23.1, 87.6],[23.5, 87.1],[23.68, 86.97]],
-  [[13.08, 80.27],[13.0, 79.7],[12.95, 79.0],[12.95, 78.2],[12.97, 77.59]],
-  [[19.076, 72.877],[19.6, 72.85],[20.4, 72.9],[21.2, 72.85],[22.3, 72.6],[23.03, 72.58]],
-  [[28.61, 77.21],[28.5, 77.9],[28.2, 78.8],[27.8, 79.7],[27.2, 80.4],[26.85, 80.95]],
-  [[17.385, 78.486],[17.3, 79.1],[17.0, 79.7],[16.7, 80.3],[16.51, 80.65]],
-  [[22.58, 88.36],[22.2, 87.9],[21.7, 87.3],[21.0, 86.6],[20.27, 85.84]],
-  [[26.92, 75.78],[27.2, 76.2],[27.5, 76.6],[27.9, 77.0],[28.61, 77.21]],
-  [[18.52, 73.85],[18.0, 74.6],[17.7, 75.7],[17.5, 76.9],[17.385, 78.486]],
+// Main operational corridor: Mumbai (CSMT) → Pune
+const mumbaiPuneCorridor: [number, number][] = [
+  [19.076, 72.877], [19.02, 73.05], [18.95, 73.25],
+  [18.85, 73.45], [18.75, 73.65], [18.52, 73.85],
 ];
 
-function FlyTo({ target }: { target: [number, number] | null }) {
+// Dashed reroute branching via Khopoli detour to Pune
+const rerouteAltPath: [number, number][] = [
+  [18.95, 73.25], [18.82, 73.30], [18.70, 73.45],
+  [18.60, 73.62], [18.52, 73.85],
+];
+
+// Approximate incident epicenters keyed by incident id
+const incidentCoords: Record<string, [number, number]> = {
+  "INC-2041": [18.7546, 73.4062], // KM 142, near Lonavla
+  "INC-2040": [18.9402, 72.8356], // CSMT Mumbai
+  "INC-2039": [27.85, 77.55],
+};
+
+function haversineKm(a: [number, number], b: [number, number]) {
+  const R = 6371;
+  const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+  const dLng = ((b[1] - a[1]) * Math.PI) / 180;
+  const lat1 = (a[0] * Math.PI) / 180;
+  const lat2 = (b[0] * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+function FlyTo({ target, zoom = 11 }: { target: [number, number] | null; zoom?: number }) {
   const map = useMap();
   useEffect(() => {
-    if (target) map.flyTo(target, 7, { duration: 1.2 });
-  }, [target, map]);
+    if (target) map.flyTo(target, zoom, { duration: 2.2, easeLinearity: 0.25 });
+  }, [target, zoom, map]);
   return null;
 }
 
-export function RailMap({ onSelectTrain, focus }: { onSelectTrain?: (t: Train) => void; focus?: [number, number] | null }) {
+function CriticalAutoPan({ incidents }: { incidents: Incident[] }) {
+  const map = useMap();
+  const critical = incidents.find(
+    (i) => i.severity === "critical" && !i.resolved && incidentCoords[i.id]
+  );
+  const id = critical?.id;
+  useEffect(() => {
+    if (!id) return;
+    const coord = incidentCoords[id];
+    const t = setTimeout(() => {
+      map.flyTo(coord, 12, { duration: 3.0, easeLinearity: 0.2 });
+    }, 1400);
+    return () => clearTimeout(t);
+  }, [id, map]);
+  return null;
+}
+
+function IncidentHalo({ incidents }: { incidents: Incident[] }) {
+  const map = useMap();
+  useEffect(() => {
+    const layers: L.Layer[] = [];
+    incidents.forEach((i) => {
+      const c = incidentCoords[i.id];
+      if (!c) return;
+      const color = i.severity === "critical" ? "#D93636" : "#CA8A04";
+      const halo = L.circle(c, {
+        radius: 50_000,
+        color,
+        weight: 1,
+        opacity: 0.5,
+        fillColor: color,
+        fillOpacity: 0.06,
+        dashArray: "4 6",
+      }).addTo(map);
+      layers.push(halo);
+    });
+    return () => { layers.forEach((l) => map.removeLayer(l)); };
+  }, [incidents, map]);
+  return null;
+}
+
+export function RailMap({
+  onSelectTrain,
+  focus,
+  showReroute = true,
+}: {
+  onSelectTrain?: (t: Train) => void;
+  focus?: [number, number] | null;
+  showReroute?: boolean;
+}) {
   const trains = useTrains();
-  // Limit visible markers slightly for perf if needed; keeping all is fine here.
-  const items = useMemo(() => trains, [trains]);
+  const incidents = useIncidents();
+
+  const hotspots = useMemo(
+    () =>
+      incidents
+        .filter((i) => !i.resolved && incidentCoords[i.id])
+        .map((i) => incidentCoords[i.id]),
+    [incidents]
+  );
+
+  const hasCritical = incidents.some(
+    (i) => i.severity === "critical" && !i.resolved && incidentCoords[i.id]
+  );
+
   return (
     <MapContainer
-      center={[22.5, 80]}
-      zoom={5}
-      minZoom={4}
-      maxZoom={11}
+      center={[18.82, 73.35]}
+      zoom={9}
+      minZoom={5}
+      maxZoom={13}
       className="h-full w-full"
       worldCopyJump={false}
       preferCanvas
@@ -57,26 +137,65 @@ export function RailMap({ onSelectTrain, focus }: { onSelectTrain?: (t: Train) =
         attribution="&copy; OpenStreetMap"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      {corridorPaths.map((p, i) => (
-        <Polyline key={i} positions={p} pathOptions={{ color: "#2E6DB4", weight: 2.5, opacity: 0.55 }} />
-      ))}
-      {items.map((t) => (
-        <Marker
-          key={t.id}
-          position={[t.lat, t.lng]}
-          icon={trainIcon(t.status, t.heading)}
-          eventHandlers={{ click: () => onSelectTrain?.(t) }}
-        >
-          <Popup>
-            <div className="text-xs">
-              <div className="font-semibold">{t.number} · {t.name}</div>
-              <div>{t.route}</div>
-              <div>{t.speedKmh} km/h · {t.status.toUpperCase()}</div>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
-      <FlyTo target={focus ?? null} />
+
+      {/* Mumbai–Pune main corridor with neon glow */}
+      <Polyline
+        positions={mumbaiPuneCorridor}
+        pathOptions={{ color: "#5BA8FF", weight: 10, opacity: 0.18 }}
+      />
+      <Polyline
+        positions={mumbaiPuneCorridor}
+        pathOptions={{ color: "#5BA8FF", weight: 5, opacity: 0.4 }}
+      />
+      <Polyline
+        positions={mumbaiPuneCorridor}
+        pathOptions={{ color: "#BFE0FF", weight: 2, opacity: 0.95 }}
+      />
+
+      {showReroute && hasCritical && (
+        <>
+          <Polyline
+            positions={rerouteAltPath}
+            pathOptions={{ color: "#22E7A1", weight: 7, opacity: 0.18 }}
+          />
+          <Polyline
+            positions={rerouteAltPath}
+            pathOptions={{
+              color: "#22E7A1",
+              weight: 2.5,
+              opacity: 0.95,
+              dashArray: "8 8",
+            }}
+          />
+        </>
+      )}
+
+      <IncidentHalo incidents={incidents} />
+
+      {trains.map((t) => {
+        const pos: [number, number] = [t.lat, t.lng];
+        const near = hotspots.some((h) => haversineKm(pos, h) <= 50);
+        const dimmed = hotspots.length > 0 && !near;
+        return (
+          <Marker
+            key={t.id}
+            position={pos}
+            icon={trainIcon(t.status, t.heading, dimmed, near)}
+            eventHandlers={{ click: () => onSelectTrain?.(t) }}
+          >
+            <Popup>
+              <div className="text-xs">
+                <div className="font-semibold">{t.number} · {t.name}</div>
+                <div>{t.route}</div>
+                <div>{t.speedKmh} km/h · {t.status.toUpperCase()}</div>
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
+
+      <CriticalAutoPan incidents={incidents} />
+      <FlyTo target={focus ?? null} zoom={11} />
     </MapContainer>
   );
 }
