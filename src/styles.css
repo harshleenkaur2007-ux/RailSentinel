@@ -150,5 +150,47 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+}
+
+/* Custom utility tokens for RailSentinel */
+@theme inline {
+  --color-status-green: var(--status-green);
+  --color-status-yellow: var(--status-yellow);
+  --color-status-orange: var(--status-orange);
+  --color-status-red: var(--status-red);
+  --color-navy: var(--navy);
+  --color-navy-deep: var(--navy-deep);
+  --color-navy-elev: var(--navy-elev);
+}
+
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.62 0.24 25 / 0.6); }
+  50%      { box-shadow: 0 0 0 12px oklch(0.62 0.24 25 / 0); }
+}
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.8; }
+  50%      { opacity: 1; }
+}
+
+@utility pulse-alert { animation: pulse-red 1.6s ease-out infinite; }
+@utility text-glow-red { text-shadow: 0 0 12px oklch(0.62 0.24 25 / 0.7); }
+
+/* Leaflet dark-mode tweaks */
+.leaflet-container {
+  background: var(--navy-deep) !important;
+  font-family: inherit;
+}
+.leaflet-tile { filter: hue-rotate(180deg) invert(0.92) brightness(0.95) contrast(0.9); }
+.leaflet-control-attribution {
+  background: oklch(0.18 0.06 260 / 0.7) !important;
+  color: oklch(0.7 0.02 250) !important;
+}
+.leaflet-control-attribution a { color: oklch(0.75 0.08 250) !important; }
+.leaflet-bar a {
+  background: var(--navy-elev) !important;
+  color: var(--foreground) !important;
+  border-bottom-color: var(--border) !important;
 }
